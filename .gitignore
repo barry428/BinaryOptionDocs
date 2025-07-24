@@ -3,6 +3,7 @@
 *.png
 *.svg
 *.html
+*.pdf
 
 # IDE
 .idea/
