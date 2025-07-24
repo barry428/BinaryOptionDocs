@@ -1,0 +1,18 @@
+
+# 图文
+*.png
+*.svg
+*.html
+
+# IDE
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+
+# OS
+.DS_Store
+
+
+
