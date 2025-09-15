@@ -1,0 +1,274 @@
+include:
+  - project: 'nogle/btsecom/btse-backend/microservice_commons'          
+    ref: 'main'
+    file: '/commons-cicd/gitlab/pipeline/.gitlab-ci.job.yml'
+
+variables:
+  BUILD_IMAGE: "registry.gitlab.com/nogle/btsecom/btse-backend/binary_option/binaryoption-build-image-21:latest"
+  TARGET_PROJECT_FOLDER: "."
+  APP_SERVICE_NAME: "binaryoption"
+
+stages:
+  - build
+  - test
+  - deploy_dev
+  - deploy_staging
+  - upload
+  - notification
+
+build:
+  stage: build
+  extends:
+    - .build:all:innerRunner:v3
+  only:
+    - main
+    - merge_requests
+    - /^rel\/v.*$/
+  except:
+    - schedules
+
+deploy:dev:
+  stage: deploy_dev
+  dependencies:
+    - build
+  extends:
+    - .deploy:dev:v3
+  needs: [ "build" ]
+  only:
+    - main
+  except:
+    - schedules
+  allow_failure: false
+  variables:
+    HOST: "10.1.29.45"
+    USER: "svdp.lmtd"
+    SSH_PASSWORD: "$SSH_PWD"
+
+build:feature:
+  stage: build
+  extends:
+    - .build:all:innerRunner:v3
+  rules:
+    - if: $CI_COMMIT_BRANCH =~ /^feature\/.*$/
+      when: manual
+
+deploy:dev:feature:
+  stage: deploy_dev
+  extends:
+    - .deploy:dev:v3
+  needs: [ "build:feature" ]
+  rules:
+    - if: $CI_COMMIT_BRANCH =~ /^feature\/.*$/
+  variables:
+    HOST: "10.1.29.45"
+    USER: "svdp.lmtd"
+    SSH_PASSWORD: "$SSH_PWD"
+
+deploy:staging:01:
+  stage: deploy_staging
+  extends:
+    - .deploy:staging:v3
+  dependencies:
+    - build
+  needs: [ "build", "deploy:dev" ]
+  only:
+    - main
+  except:
+    - schedules
+  when: manual
+  allow_failure: false
+  variables:
+    HOST: "10.1.35.186"
+    USER: "svdp.lmtd"
+    SSH_PASSWORD: "$SSH_PWD"
+
+deploy:staging:02:
+  stage: deploy_staging
+  extends:
+    - .deploy:staging:v3
+  dependencies:
+    - build
+  needs: [ "build", "deploy:dev" ]
+  only:
+    - main
+  except:
+    - schedules
+  when: manual
+  allow_failure: false
+  variables:
+    HOST: "10.1.35.187"
+    USER: "svdp.lmtd"
+    SSH_PASSWORD: "$SSH_PWD"
+
+upload:testnet_prod:
+  stage: upload
+  extends:
+    - .upload_file:testnet_and_prod:v3
+  needs: [ "build", "deploy:staging:01", "deploy:staging:02" ]
+  only:
+    - main
+  except:
+    - merge_requests
+    - schedules
+  allow_failure: false
+
+release:tag:
+  stage: notification
+  extends:
+    - .release:tag:v3
+  needs: [ "build", "upload:testnet_prod" ]
+  only:
+    - main
+  except:
+    - merge_requests
+    - schedules
+  allow_failure: false
+
+notification:testnet_prod:
+  stage: notification
+  extends:
+    - .notification:testnet_and_prod:v3
+  needs: [ "build", "upload:testnet_prod" ]
+  only:
+    - main
+  except:
+    - merge_requests
+    - schedules
+  allow_failure: false
+
+deploy:dev:manual:
+  stage: deploy_dev
+  extends:
+    - .deploy:dev:v3
+  dependencies:
+    - build
+  needs: [ "build" ]
+  only:
+    - /^rel\/v.*$/
+  except:
+    - schedules
+  when: manual
+  allow_failure: false
+  variables:
+    HOST: "10.1.29.45"
+    USER: "svdp.lmtd"
+    SSH_PASSWORD: "$SSH_PWD"
+
+deploy:staging:01:manual:
+  stage: deploy_staging
+  extends:
+    - .deploy:staging:v3
+  dependencies:
+    - build
+  needs: [ "build" ]
+  only:
+    - /^rel\/v.*$/
+  except:
+    - merge_requests
+    - schedules
+  when: manual
+  allow_failure: false
+  variables:
+    HOST: "10.1.35.186"
+    USER: "svdp.lmtd"
+    SSH_PASSWORD: "$SSH_PWD"
+
+deploy:staging:02:manual:
+  stage: deploy_staging
+  extends:
+    - .deploy:staging:v3
+  dependencies:
+    - build
+  needs: [ "build" ]
+  only:
+    - /^rel\/v.*$/
+  except:
+    - merge_requests
+    - schedules
+  when: manual
+  allow_failure: false
+  variables:
+    HOST: "10.1.35.187"
+    USER: "svdp.lmtd"
+    SSH_PASSWORD: "$SSH_PWD"
+
+upload:testnet_prod:hotfix:auto:
+  stage: upload
+  extends:
+    - .upload_file:testnet_and_prod:v3
+  needs: [ "build", "deploy:staging:01:manual", "deploy:staging:02:manual" ]
+  only:
+    - /^rel\/v.*$/
+  except:
+    - merge_requests
+    - schedules
+  allow_failure: false
+
+release:tag:hotfix:auto:
+  stage: notification
+  extends:
+    - .release:tag:v3
+  needs: [ "build", "upload:testnet_prod:hotfix:auto" ]
+  only:
+    - /^rel\/v.*$/
+  except:
+    - merge_requests
+    - schedules
+  allow_failure: false
+
+notification:testnet_prod:hotfix:auto:
+  stage: notification
+  extends:
+    - .notification:testnet_and_prod:v3
+  needs: [ "build", "upload:testnet_prod:hotfix:auto" ]
+  only:
+    - /^rel\/v.*$/
+  except:
+    - merge_requests
+    - schedules
+  allow_failure: false
+
+upload:testnet_prod:hotfix:manual:
+  stage: upload
+  extends:
+    - .upload_file:testnet_and_prod:v3
+  needs: [ "build" ]
+  only:
+    - /^rel\/v.*$/
+  except:
+    - merge_requests
+    - schedules
+  when: manual
+  allow_failure: false
+
+release:tag:hotfix:auto:hotfix:manual:
+  stage: notification
+  extends:
+    - .release:tag:v3
+  needs: [ "build", "upload:testnet_prod:hotfix:manual" ]
+  only:
+    - /^rel\/v.*$/
+  except:
+    - merge_requests
+    - schedules
+  allow_failure: false
+
+notification:testnet_prod:hotfix:manual:
+  stage: notification
+  extends:
+    - .notification:testnet_and_prod:v3
+  needs: [ "build", "upload:testnet_prod:hotfix:manual" ]
+  only:
+    - /^rel\/v.*$/
+  except:
+    - merge_requests
+    - schedules
+  allow_failure: false
+
+schedule:check:
+  stage: test
+  allow_failure: false
+  extends:
+    - .test:all:innerRunner:v3
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
